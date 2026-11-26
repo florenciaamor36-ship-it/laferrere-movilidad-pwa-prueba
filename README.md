@@ -13,7 +13,7 @@ PWA independiente con mapa interactivo para explorar algunos trazados AMBA de la
 - Licencia indicada por el publicador: Creative Commons Attribution 4.0 (CC BY 4.0). Atribución visible en la interfaz y aquí.
 - El portal indica fecha de actualización del dataset: 12/04/2023, frecuencia eventual. Los trazados no se verificaron en campo y pueden estar desactualizados o contener variantes históricas.
 - Se filtraron trazas que atraviesan el área central aproximada de Gregorio de Laferrere; la app conserva la geometría completa de cada variante seleccionada. Los nombres IDA/VUELTA, variantes y operadores vienen del recurso.
-- Mapa base: OpenStreetMap, con atribución visible en el mapa y pie de página.
+- El mapa base muestra teselas de OpenStreetMap con atribución visible. La línea vectorial se dibuja en la app y sigue visible aunque las teselas tarden en cargar.
 - Cuándo SUBO publica cobertura en vivo para estas líneas; esta PWA no consume su API ni reproduce posiciones GPS. No hay integración no autorizada.
 
 ## Publicación
