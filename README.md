@@ -1,17 +1,20 @@
-# Laferrere Movilidad — prototipo de prueba
+# Laferrere Movilidad — prototipo
 
-PWA independiente, móvil y con selector interactivo de líneas 86, 88 y 96. No pertenece al Municipio ni a una empresa de colectivos.
+PWA independiente con mapa interactivo para explorar algunos trazados AMBA de las líneas 86, 88 y 96 publicados por el Ministerio de Transporte. No es una app municipal ni de las empresas de colectivos.
 
-## Alcance actual
-- Las líneas 86, 88 y 96 aparecen en el listado oficial de cobertura de la app Cuándo SUBO para Ciudad y Gran Buenos Aires.
-- La selección solo cambia la línea mostrada y enlaza a la fuente oficial.
-- **No hay integración de API, GPS, mapas, recorridos, paradas ni horarios propios.** No se simulan posiciones ni tiempos.
-- Para agregar datos propios hace falta una fuente vigente y permiso de uso. El dataset GTFS consultado en BA Data está suspendido/revisión y describe colectivos de CABA; no sirve como feed actual de Laferrere.
+## Qué hace hoy
+- Muestra en un mapa el trazado seleccionado por línea, variante y sentido (IDA/VUELTA).
+- Permite pedir la ubicación del teléfono y resalta cuál de los trazados guardados está geométricamente más cerca. Esa distancia se calcula contra una geometría histórica aproximada: no indica parada cercana ni presencia de un colectivo.
+- La información cartográfica se almacena en `routes.json`; no redirige al usuario a otra app para ver el recorrido.
+- No ofrece paradas individuales, horarios, predicción de llegada ni ubicación GPS de unidades.
 
-Fuentes consultadas:
-- https://www.argentina.gob.ar/aplicaciones/cuandosubo
-- https://www.argentina.gob.ar/cuandosubo/lineas-incluidas
-- https://data.buenosaires.gob.ar/dataset/colectivos-gtfs (el portal informa que sus datos API/GTFS están suspendidos y en revisión; publicado originalmente en 2019; CABA)
+## Fuente y límites
+- Dataset: Ministerio de Transporte, “Recorridos de servicios de colectivos AMBA”; recurso “Recorrido por línea”. Ficha: https://datos.transporte.gob.ar/dataset/recorridos-de-servicios-de-colectivos-amba
+- Licencia indicada por el publicador: Creative Commons Attribution 4.0 (CC BY 4.0). Atribución visible en la interfaz y aquí.
+- El portal indica fecha de actualización del dataset: 12/04/2023, frecuencia eventual. Los trazados no se verificaron en campo y pueden estar desactualizados o contener variantes históricas.
+- Se filtraron trazas que atraviesan el área central aproximada de Gregorio de Laferrere; la app conserva la geometría completa de cada variante seleccionada. Los nombres IDA/VUELTA, variantes y operadores vienen del recurso.
+- Mapa base: OpenStreetMap, con atribución visible en el mapa y pie de página.
+- Cuándo SUBO publica cobertura en vivo para estas líneas; esta PWA no consume su API ni reproduce posiciones GPS. No hay integración no autorizada.
 
 ## Publicación
-Sitio estático; GitHub Pages despliega la raíz del repositorio mediante Actions.
+Sitio estático en GitHub Pages; GitHub Actions publica la raíz del repositorio.
