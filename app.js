@@ -20,13 +20,14 @@ function renderRoute(fit=false){
   if(routeLayer)map.removeLayer(routeLayer);if(endpointLayer)map.removeLayer(endpointLayer);
   const lineColor=colors[f.properties.line]||'#d5ff58';
   routeLayer=L.geoJSON(f,{style:{color:lineColor,weight:6,opacity:.92,lineCap:'round',lineJoin:'round'}}).addTo(map);
-  const coords=f.geometry.coordinates;const first=[coords[0][1],coords[0][0]],last=[coords.at(-1)[1],coords.at(-1)[0]];
+  const coords=f.geometry.coordinates;const end=coords[coords.length-1];const first=[coords[0][1],coords[0][0]],last=[end[1],end[0]];
   endpointLayer=L.layerGroup([
     L.circleMarker(first,{radius:6,color:'#10131d',weight:2,fillColor:lineColor,fillOpacity:1}).bindTooltip('Extremo del trazado publicado'),
     L.circleMarker(last,{radius:6,color:'#10131d',weight:2,fillColor:lineColor,fillOpacity:1}).bindTooltip('Extremo del trazado publicado')
   ]).addTo(map);
   const direction=f.properties.direction==='IDA'?'Ida':'Vuelta';
-  summary.innerHTML=`<span class="summary-chip" style="--chip:${lineColor}">Línea ${f.properties.line}</span><span>Variante ${f.properties.variant} · ${direction}</span><small>Empresa en el registro: ${escapeText(f.properties.operator||'sin dato')}</small>`;
+  const lineRecords=routes.features.filter(item=>item.properties.line===f.properties.line).length;
+  summary.innerHTML=`<span class="summary-chip" style="--chip:${lineColor}">Línea ${f.properties.line}</span><span>Variante ${f.properties.variant} · ${direction}</span><small>${lineRecords} trazas de esta línea incluidas en el mapa · empresa en el registro: ${escapeText(f.properties.operator||'sin dato')}</small>`;
   locationResult.classList.add('hidden');
   if(fit)map.fitBounds(routeLayer.getBounds().pad(.08),{maxZoom:14});
 }
