@@ -5,68 +5,42 @@ const summary=document.getElementById('routeSummary');
 const loading=document.getElementById('mapLoading');
 const locateBtn=document.getElementById('locateBtn');
 const locationResult=document.getElementById('locationResult');
-let routes, map, routeLayer, endpointLayer, userLayer, locateMarker;
+const mapWrap=document.getElementById('mapWrap');
+const canvas=document.getElementById('mapCanvas');
+const ctx=canvas.getContext('2d');
+let routes,currentFeature,view={z:12,x:0,y:0},userPosition=null,dragState=null,drawQueued=false;
 const colors={'86':'#d5ff58','88':'#62d8ff','96':'#ffae57'};
+const tileImages=new Map();
 
+function escapeText(value){const d=document.createElement('div');d.textContent=value;return d.innerHTML}
 function buildVariantOptions(){
   if(!routes)return;
   const line=lineSelect.value;
   const variants=[...new Set(routes.features.filter(f=>f.properties.line===line).map(f=>f.properties.variant))].sort((a,b)=>a.localeCompare(b,'es',{numeric:true}));
   variantSelect.replaceChildren(...variants.map(v=>{const o=document.createElement('option');o.value=v;o.textContent=`Variante ${v}`;return o}));
 }
-function getFeature(){return routes?.features.find(f=>f.properties.line===lineSelect.value&&f.properties.variant===variantSelect.value&&f.properties.direction===directionSelect.value)}
-function renderRoute(fit=false){
-  const f=getFeature();if(!f||!map)return;
-  if(routeLayer)map.removeLayer(routeLayer);if(endpointLayer)map.removeLayer(endpointLayer);
-  const lineColor=colors[f.properties.line]||'#d5ff58';
-  routeLayer=L.geoJSON(f,{style:{color:lineColor,weight:6,opacity:.92,lineCap:'round',lineJoin:'round'}}).addTo(map);
-  const coords=f.geometry.coordinates;const end=coords[coords.length-1];const first=[coords[0][1],coords[0][0]],last=[end[1],end[0]];
-  endpointLayer=L.layerGroup([
-    L.circleMarker(first,{radius:6,color:'#10131d',weight:2,fillColor:lineColor,fillOpacity:1}).bindTooltip('Extremo del trazado publicado'),
-    L.circleMarker(last,{radius:6,color:'#10131d',weight:2,fillColor:lineColor,fillOpacity:1}).bindTooltip('Extremo del trazado publicado')
-  ]).addTo(map);
-  const direction=f.properties.direction==='IDA'?'Ida':'Vuelta';
-  const lineRecords=routes.features.filter(item=>item.properties.line===f.properties.line).length;
-  summary.innerHTML=`<span class="summary-chip" style="--chip:${lineColor}">Línea ${f.properties.line}</span><span>Variante ${f.properties.variant} · ${direction}</span><small>${lineRecords} trazas de esta línea incluidas en el mapa · empresa en el registro: ${escapeText(f.properties.operator||'sin dato')}</small>`;
-  locationResult.classList.add('hidden');
-  if(fit)map.fitBounds(routeLayer.getBounds().pad(.08),{maxZoom:14});
+function getFeature(){return routes?routes.features.find(f=>f.properties.line===lineSelect.value&&f.properties.variant===variantSelect.value&&f.properties.direction===directionSelect.value):null}
+function mercator(lon,lat,z){const s=256*2**z,clamped=Math.max(-85.05112878,Math.min(85.05112878,lat)),sin=Math.sin(clamped*Math.PI/180);return [(lon+180)/360*s,(.5-Math.log((1+sin)/(1-sin))/(4*Math.PI))*s]}
+function setCanvasSize(){const r=mapWrap.getBoundingClientRect();if(!r.width||!r.height)return;const dpr=Math.min(window.devicePixelRatio||1,2),w=Math.round(r.width*dpr),h=Math.round(r.height*dpr);if(canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h;canvas.style.width=`${r.width}px`;canvas.style.height=`${r.height}px`}scheduleDraw()}
+function fitRoute(){if(!currentFeature)return;const coords=currentFeature.geometry.coordinates;let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;for(const c of coords){const [x,y]=mercator(c[0],c[1],0);minX=Math.min(minX,x);maxX=Math.max(maxX,x);minY=Math.min(minY,y);maxY=Math.max(maxY,y)}const dpr=Math.min(window.devicePixelRatio||1,2),w=canvas.width/dpr||mapWrap.clientWidth,h=canvas.height/dpr||mapWrap.clientHeight;if(!w||!h)return;let z=15;while(z>6&&((maxX-minX)*256*2**z>w*.82||(maxY-minY)*256*2**z>h*.82))z--;const [[x1,y1],[x2,y2]]=[mercator(coords[0][0],coords[0][1],z),mercator(coords[coords.length-1][0],coords[coords.length-1][1],z)];const all=coords.map(c=>mercator(c[0],c[1],z));const minx=Math.min(...all.map(p=>p[0])),maxx=Math.max(...all.map(p=>p[0])),miny=Math.min(...all.map(p=>p[1])),maxy=Math.max(...all.map(p=>p[1]));view={z,x:(minx+maxx)/2,y:(miny+maxy)/2};if(userPosition){const [ux,uy]=mercator(userPosition[1],userPosition[0],z);view.x=(view.x+ux)/2;view.y=(view.y+uy)/2}scheduleDraw()}
+function scheduleDraw(){if(drawQueued)return;drawQueued=true;requestAnimationFrame(()=>{drawQueued=false;drawMap()})}
+function drawMap(){if(!ctx||!canvas.width||!canvas.height)return;const dpr=Math.min(window.devicePixelRatio||1,2),w=canvas.width/dpr,h=canvas.height/dpr,z=view.z,scale=256*2**z,left=view.x-w/2,top=view.y-h/2;
+  ctx.setTransform(dpr,0,0,dpr,0,0);ctx.fillStyle='#20283a';ctx.fillRect(0,0,w,h);
+  const minTileX=Math.floor(left/256),maxTileX=Math.floor((left+w)/256),minTileY=Math.floor(top/256),maxTileY=Math.floor((top+h)/256),tileCount=2**z;
+  for(let ty=minTileY;ty<=maxTileY;ty++){if(ty<0||ty>=tileCount)continue;for(let tx=minTileX;tx<=maxTileX;tx++){const wrapped=((tx%tileCount)+tileCount)%tileCount,key=`${z}/${wrapped}/${ty}`,dx=tx*256-left,dy=ty*256-top;let image=tileImages.get(key);if(!image){image=new Image();tileImages.set(key,image);image.onload=scheduleDraw;image.onerror=()=>{};image.src=`https://tile.openstreetmap.org/${z}/${wrapped}/${ty}.png`}if(image.complete&&image.naturalWidth)ctx.drawImage(image,dx,dy,256,256)}}
+  if(currentFeature){const lineColor=colors[currentFeature.properties.line]||'#d5ff58';const coords=currentFeature.geometry.coordinates;ctx.beginPath();coords.forEach((c,i)=>{const [wx,wy]=mercator(c[0],c[1],z),sx=wx-left,sy=wy-top;if(i===0)ctx.moveTo(sx,sy);else ctx.lineTo(sx,sy)});ctx.lineCap='round';ctx.lineJoin='round';ctx.strokeStyle='rgba(9,14,22,.82)';ctx.lineWidth=8;ctx.stroke();ctx.strokeStyle=lineColor;ctx.lineWidth=4.5;ctx.stroke();drawPoint(coords[0],lineColor,left,top,z);drawPoint(coords[coords.length-1],lineColor,left,top,z)}
+  if(userPosition){const [x,y]=mercator(userPosition[1],userPosition[0],z),sx=x-left,sy=y-top;ctx.beginPath();ctx.arc(sx,sy,8,0,Math.PI*2);ctx.fillStyle='#ff5578';ctx.fill();ctx.lineWidth=3;ctx.strokeStyle='#fff';ctx.stroke()}
 }
-function escapeText(value){const d=document.createElement('div');d.textContent=value;return d.innerHTML}
-function pointSegmentDistanceMeters(p,a,b){
-  const lat0=p[0]*Math.PI/180;const scaleX=111320*Math.cos(lat0),scaleY=110540;
-  const px=p[1]*scaleX,py=p[0]*scaleY,ax=a[1]*scaleX,ay=a[0]*scaleY,bx=b[1]*scaleX,by=b[0]*scaleY;
-  const dx=bx-ax,dy=by-ay,t=Math.max(0,Math.min(1,((px-ax)*dx+(py-ay)*dy)/(dx*dx+dy*dy||1)));
-  return Math.hypot(px-(ax+t*dx),py-(ay+t*dy));
-}
-function findNearestRoute(position){
-  const p=[position.coords.latitude,position.coords.longitude];let best=null;
-  routes.features.forEach(f=>{const c=f.geometry.coordinates;let dist=Infinity;for(let i=1;i<c.length;i++)dist=Math.min(dist,pointSegmentDistanceMeters(p,[c[i-1][1],c[i-1][0]],[c[i][1],c[i][0]]));if(!best||dist<best.dist)best={feature:f,dist}});
-  const f=best.feature;lineSelect.value=f.properties.line;buildVariantOptions();variantSelect.value=f.properties.variant;directionSelect.value=f.properties.direction;renderRoute(false);
-  if(userLayer)map.removeLayer(userLayer);userLayer=L.layerGroup().addTo(map);
-  locateMarker=L.circleMarker(p,{radius:8,color:'#fff',weight:3,fillColor:'#ff5578',fillOpacity:1}).bindTooltip('Tu ubicación').addTo(userLayer);
-  const label=`El trazado publicado más cercano es la línea ${f.properties.line}, variante ${f.properties.variant} (${f.properties.direction==='IDA'?'ida':'vuelta'}), a unos ${Math.round(best.dist)} m de tu ubicación. Esto no confirma que el servicio siga vigente ni que haya un colectivo allí.`;
-  locationResult.textContent=label;locationResult.classList.remove('hidden');map.fitBounds(L.featureGroup([locateMarker,routeLayer]).getBounds().pad(.18),{maxZoom:15});
-}
-lineSelect.addEventListener('change',()=>{buildVariantOptions();renderRoute(true)});
-variantSelect.addEventListener('change',()=>renderRoute(true));
-directionSelect.addEventListener('change',()=>renderRoute(true));
-locateBtn.addEventListener('click',()=>{
-  if(!navigator.geolocation){locationResult.textContent='Este navegador no ofrece ubicación.';locationResult.classList.remove('hidden');return}
-  locateBtn.disabled=true;locateBtn.textContent='Buscando…';
-  navigator.geolocation.getCurrentPosition(pos=>{findNearestRoute(pos);locateBtn.disabled=false;locateBtn.textContent='◎ Mi ubicación'},err=>{locationResult.textContent=err.code===1?'No diste permiso para usar tu ubicación. Podés habilitarlo desde el navegador.':'No se pudo obtener tu ubicación ahora.';locationResult.classList.remove('hidden');locateBtn.disabled=false;locateBtn.textContent='◎ Mi ubicación'},{enableHighAccuracy:true,timeout:12000,maximumAge:60000});
-});
-if('serviceWorker'in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
-window.addEventListener('load',()=>{
-  const installBtn=document.getElementById('installBtn');let promptEvent;
-  window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();promptEvent=e;installBtn.classList.remove('hidden')});
-  installBtn.addEventListener('click',async()=>{if(!promptEvent)return;promptEvent.prompt();await promptEvent.userChoice;promptEvent=null;installBtn.classList.add('hidden')});
-});
-(async()=>{
-  try{
-    routes=await fetch('./routes.json').then(r=>{if(!r.ok)throw new Error('No se pudieron cargar los trazados');return r.json()});
-    map=L.map('map',{zoomControl:false}).setView([-34.75,-58.585],12);
-    L.control.zoom({position:'bottomright'}).addTo(map);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'}).addTo(map);
-    buildVariantOptions();renderRoute(true);loading.classList.add('hidden');
-  }catch(e){loading.textContent='No se pudieron cargar los trazados. Probá recargar con internet.';loading.classList.add('error')}
-})();
+function drawPoint(c,color,left,top,z){const [x,y]=mercator(c[0],c[1],z),sx=x-left,sy=y-top;ctx.beginPath();ctx.arc(sx,sy,5,0,Math.PI*2);ctx.fillStyle=color;ctx.fill();ctx.lineWidth=2;ctx.strokeStyle='#10131d';ctx.stroke()}
+function renderRoute(fit=true){const f=getFeature();if(!f)return;currentFeature=f;const lineColor=colors[f.properties.line]||'#d5ff58',direction=f.properties.direction==='IDA'?'Ida':'Vuelta',lineRecords=routes.features.filter(item=>item.properties.line===f.properties.line).length;summary.replaceChildren();const chip=document.createElement('span');chip.className='summary-chip';chip.style.setProperty('--chip',lineColor);chip.textContent=`Línea ${f.properties.line}`;const text=document.createElement('span');text.textContent=`Variante ${f.properties.variant} · ${direction}`;const small=document.createElement('small');small.textContent=`${lineRecords} trazas de esta línea incluidas · empresa del registro: ${f.properties.operator||'sin dato'}`;summary.append(chip,text,small);if(fit)fitRoute();else scheduleDraw()}
+function pointSegmentDistanceMeters(p,a,b){const lat0=p[0]*Math.PI/180,scaleX=111320*Math.cos(lat0),scaleY=110540,px=p[1]*scaleX,py=p[0]*scaleY,ax=a[1]*scaleX,ay=a[0]*scaleY,bx=b[1]*scaleX,by=b[0]*scaleY,dx=bx-ax,dy=by-ay,t=Math.max(0,Math.min(1,((px-ax)*dx+(py-ay)*dy)/(dx*dx+dy*dy||1)));return Math.hypot(px-(ax+t*dx),py-(ay+t*dy))}
+function findNearestRoute(position){const p=[position.coords.latitude,position.coords.longitude];let best=null;for(const f of routes.features){const c=f.geometry.coordinates;let dist=Infinity;for(let i=1;i<c.length;i++)dist=Math.min(dist,pointSegmentDistanceMeters(p,[c[i-1][1],c[i-1][0]],[c[i][1],c[i][0]]));if(!best||dist<best.dist)best={feature:f,dist}}const f=best.feature;userPosition=p;lineSelect.value=f.properties.line;buildVariantOptions();variantSelect.value=f.properties.variant;directionSelect.value=f.properties.direction;renderRoute(false);const label=`El trazado publicado más cercano es la línea ${f.properties.line}, variante ${f.properties.variant} (${f.properties.direction==='IDA'?'ida':'vuelta'}), a unos ${Math.round(best.dist)} m. Esto no confirma que la variante siga vigente ni que haya un colectivo allí.`;locationResult.textContent=label;locationResult.classList.remove('hidden');const [ux,uy]=mercator(p[1],p[0],view.z);view.x=ux;view.y=uy;view.z=15;scheduleDraw()}
+function zoomBy(delta){const old=view.z;view.z=Math.max(6,Math.min(17,old+delta));const factor=2**(view.z-old);view.x*=factor;view.y*=factor;scheduleDraw()}
+lineSelect.addEventListener('change',()=>{buildVariantOptions();renderRoute(true)});variantSelect.addEventListener('change',()=>renderRoute(true));directionSelect.addEventListener('change',()=>renderRoute(true));
+document.getElementById('zoomIn').addEventListener('click',()=>zoomBy(1));document.getElementById('zoomOut').addEventListener('click',()=>zoomBy(-1));document.getElementById('fitRoute').addEventListener('click',()=>fitRoute());
+mapWrap.addEventListener('pointerdown',e=>{if(e.target.closest('.map-controls'))return;dragState={x:e.clientX,y:e.clientY,viewX:view.x,viewY:view.y};mapWrap.setPointerCapture(e.pointerId)});mapWrap.addEventListener('pointermove',e=>{if(!dragState)return;view.x=dragState.viewX-(e.clientX-dragState.x);view.y=dragState.viewY-(e.clientY-dragState.y);scheduleDraw()});mapWrap.addEventListener('pointerup',()=>{dragState=null});mapWrap.addEventListener('pointercancel',()=>{dragState=null});mapWrap.addEventListener('wheel',e=>{e.preventDefault();zoomBy(e.deltaY<0?1:-1)},{passive:false});
+locateBtn.addEventListener('click',()=>{if(!navigator.geolocation){locationResult.textContent='Este navegador no ofrece ubicación.';locationResult.classList.remove('hidden');return}locateBtn.disabled=true;locateBtn.textContent='Buscando…';navigator.geolocation.getCurrentPosition(pos=>{findNearestRoute(pos);locateBtn.disabled=false;locateBtn.textContent='◎ Cerca mío'},err=>{locationResult.textContent=err.code===1?'No diste permiso para usar tu ubicación. Podés habilitarlo desde el navegador.':'No se pudo obtener tu ubicación ahora.';locationResult.classList.remove('hidden');locateBtn.disabled=false;locateBtn.textContent='◎ Cerca mío'},{enableHighAccuracy:true,timeout:12000,maximumAge:60000})});
+if('serviceWorker'in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=20261126-fix2',{updateViaCache:'none'}).then(r=>r.update()).catch(()=>{}));
+window.addEventListener('load',()=>{const installBtn=document.getElementById('installBtn');let promptEvent;window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();promptEvent=e;installBtn.classList.remove('hidden')});installBtn.addEventListener('click',async()=>{if(!promptEvent)return;promptEvent.prompt();await promptEvent.userChoice;promptEvent=null;installBtn.classList.add('hidden')})});
+const resizeObserver=new ResizeObserver(setCanvasSize);resizeObserver.observe(mapWrap);
+(async()=>{try{const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),15000);routes=await fetch('./routes.json?v=20261126-fix2',{signal:controller.signal,cache:'no-store'}).then(r=>{if(!r.ok)throw new Error('HTTP '+r.status);return r.json()});clearTimeout(timer);buildVariantOptions();renderRoute(true);loading.classList.add('hidden');}catch(e){loading.textContent=e.name==='AbortError'?'La carga tardó demasiado. Revisá la conexión y tocá recargar.':'No se pudo cargar el recorrido. Revisá la conexión y recargá.';loading.classList.add('error')}})();
