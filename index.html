@@ -3,8 +3,7 @@
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#10131d"><meta name="description" content="Mapa interactivo de trazados publicados de colectivos de Laferrere, con fecha y fuente visibles.">
-  <link rel="manifest" href="manifest.webmanifest"><link rel="icon" href="icon.svg" type="image/svg+xml"><link rel="stylesheet" href="styles.css">
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+  <link rel="manifest" href="manifest.webmanifest?v=20261126-fix2"><link rel="icon" href="icon.svg" type="image/svg+xml"><link rel="stylesheet" href="styles.css?v=20261126-fix2">
   <title>Laferrere Movilidad — mapa de recorridos</title>
 </head>
 <body>
@@ -24,7 +23,7 @@
           <label>Variante<select id="variantSelect" aria-label="Elegir variante"></select></label>
           <label>Sentido<select id="directionSelect" aria-label="Elegir sentido"><option value="IDA">Ida</option><option value="VUELTA">Vuelta</option></select></label>
         </div>
-        <div class="map-wrap"><div id="map" role="application" aria-label="Mapa interactivo del recorrido seleccionado"></div><div id="mapLoading" class="map-loading">Cargando trazados publicados…</div></div>
+        <div class="map-wrap" id="mapWrap"><canvas id="mapCanvas" aria-label="Mapa interactivo del recorrido seleccionado"></canvas><div id="mapLoading" class="map-loading">Cargando el recorrido…</div><div class="map-controls"><button id="zoomIn" type="button" aria-label="Acercar">+</button><button id="zoomOut" type="button" aria-label="Alejar">−</button><button id="fitRoute" type="button" aria-label="Ver recorrido completo">↗</button></div><a class="map-attribution" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">© OpenStreetMap contributors</a></div>
         <div id="routeSummary" class="route-summary" aria-live="polite"></div>
         <div id="locationResult" class="location-result hidden" aria-live="polite"></div><p class="privacy-note">Si tocás «Cerca mío», el cálculo se hace en el teléfono; no mandamos tus coordenadas a un servidor propio.</p>
         <div class="map-legend"><span><i class="sample-route"></i> Trazado del dataset</span><span><i class="sample-dot"></i> Extremos del trazado</span></div>
@@ -34,7 +33,6 @@
       <footer><span>Laferrere Movilidad · prototipo independiente</span><span>No es una app oficial</span><a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">Mapa © OpenStreetMap</a></footer>
     </main>
   </div>
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-  <script src="app.js" defer></script>
+  <script src="app.js?v=20261126-fix2" defer></script>
 </body>
 </html>
